@@ -24,18 +24,19 @@ from config import (
     FINANCE_TECH_COMPANIES,
 )
 
-# Twilio message size limit for WhatsApp
-_CHUNK_SIZE = 1600
+# Twilio counts emojis as 2+ chars, so stay well under the 1600 limit
+_CHUNK_SIZE = 1000
 
 
 def _send_chunks(client, from_: str, to: str, text: str):
-    """Send one or more messages, chunking if over WhatsApp's limit."""
+    import time
     for i in range(0, len(text), _CHUNK_SIZE):
         client.messages.create(
             from_=from_,
             to=to,
             body=text[i : i + _CHUNK_SIZE],
         )
+        time.sleep(1)
 
 
 def send_digest(new_jobs: list[dict], health_summary: dict):
