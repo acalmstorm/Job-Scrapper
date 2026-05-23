@@ -1,7 +1,7 @@
 # IT Job Tracker — Project Memory
 
 > **Purpose**: Paste this file at the start of any new Claude session to restore full context.
-> **Last updated**: 2026-05-23 (Session 2 complete)
+> **Last updated**: 2026-05-23 (Session 3 complete)
 
 ---
 
@@ -275,14 +275,107 @@ WHATSAPP_TO=whatsapp:+91XXXXXXXXXX
 
 ---
 
+### Session 3 (2026-05-23 — same day, continued)
+
+**Bug 8 — SDE 3 / SDE 4 not filtered (Dream11 "SDE 3 - DevOps")**
+- Root cause: Only `sde 2` variants were in EXCLUDE_KEYWORDS, not level 3+
+- Fix: Added `sde 3`, `sde-3`, `sde3`, `sde iii`, `sde 4`, `sde-4`, `sde4`, `sde iv`
+- File: `config.py`
+
+**Bug 9 — "SDET - 2" trailing level suffix not caught**
+- Root cause: `(SDET) - 2` has a paren before `- 2` so substring match `sdet - 2` doesn't work
+- Fix: Added `_TRAILING_LEVEL_RE = re.compile(r'[-–]\s*([2-9])\s*$')` — catches ` - N` at end of title where N ≥ 2
+- File: `processor/filter.py`
+
+**Bug 10 — "Vice President" not filtered (Citi titles)**
+- Root cause: Only `vp` in EXCLUDE_KEYWORDS, not the full form
+- Fix: Added `vice president`
+- File: `config.py`
+
+**Bug 11 — "Custom Software Engineer" LinkedIn placeholder spam**
+- Root cause: LinkedIn uses this as a placeholder title when it can't index the actual title; appeared for 8+ companies
+- Fix: Added `custom software engineer` to EXCLUDE_KEYWORDS — it's never a real job title
+- File: `config.py`
+
+**Bug 12 — Support/consulting roles passing filter**
+- Root cause: `Developer Support Engineer` (Okta) and `DevOps Consultant` (MongoDB) have no exclude keyword
+- Fix: Added `developer support`, `consultant`
+- File: `config.py`
+
+**Bug 13 — "Engineer lll" (lowercase L fake Roman numeral) not caught**
+- Root cause: LinkedIn sometimes renders `III` with lowercase `l` characters; `engineer iii` keyword doesn't match `engineer lll`
+- Fix: Added `engineer lll`, `engineer ll` to EXCLUDE_KEYWORDS
+- File: `config.py`
+
+**Bug 14 — Amazon (and others) returning non-India jobs**
+- Root cause: `APICareersScraper` collected all results without location filtering; Greenhouse/Lever/Workday all filtered, but the generic API scraper didn't
+- Fix: Added `_is_india_location()` check inside `APICareersScraper.scrape()` — skips jobs with a non-empty location that doesn't match India keywords
+- File: `scrapers/careers_scraper.py`
+
+**Bug 15 — WhatsApp messages stopped after 2 days (Twilio sandbox session)**
+- Root cause: Twilio WhatsApp Sandbox requires the user to stay "joined" — session expires after ~24h of inactivity from the user's side. When Twilio throws, `send_digest()` crashed with no error handling, causing GitHub Actions to silently fail (red ✗). User didn't notice because they only checked WhatsApp.
+- Fix: Added try/except around `send_digest()` in `main.py` with clear error print + re-raise. Added SID/status logging per chunk in `whatsapp_bot.py` so logs show delivery status.
+- **User action required**: Re-join Twilio sandbox by sending the join keyword to `+14155238886` on WhatsApp whenever messages stop.
+- Files: `main.py`, `notifier/whatsapp_bot.py`
+
+**Architecture insight — Why ~90% of results are LinkedIn URLs:**
+- 128/166 companies (77%) were configured as `playwright` scraper type
+- Playwright scrapers fail in GitHub Actions because headless Chromium on cloud runners is trivially detected as a bot by Cloudflare/DataDome on most career sites
+- When playwright scraper returns zero (or errors), LinkedIn fallback kicks in → LinkedIn URLs
+- Only Greenhouse, Lever, Workday scrapers are reliable (pure public JSON APIs, no bot detection)
+
+**Fix — Switched 13 companies from playwright to proper API scrapers:**
+
+| Company | From | To | Token/Host |
+|---------|------|----|------------|
+| HubSpot | playwright | greenhouse | `hubspotjobs` |
+| Zscaler | playwright | greenhouse | `zscaler` |
+| SentinelOne | playwright | greenhouse | `sentinellabs` |
+| Wiz | playwright | greenhouse | `wizinc` |
+| Razorpay | playwright | greenhouse | `razorpaysoftwareprivatelimited` |
+| Intel | playwright | workday_api | `intel.wd1.myworkdayjobs.com / External` |
+| Netflix | playwright | workday_api | `netflix.wd1.myworkdayjobs.com / Netflix` |
+| BrowserStack | playwright | workday_api | `browserstack.wd3.myworkdayjobs.com / External` |
+| Visa | playwright | workday_api | `visa.wd5.myworkdayjobs.com / Visa` |
+| BlackRock | playwright | workday_api | `blackrock.wd1.myworkdayjobs.com / BlackRock_Professional` |
+| Broadcom | playwright | workday_api | `broadcom.wd1.myworkdayjobs.com / External_Career` |
+| Mastercard | playwright | workday_api | `mastercard.wd1.myworkdayjobs.com / CorporateCareers` |
+| Meesho | playwright | lever | `meesho` |
+
+**Playwright remaining**: 115 companies (down from 128)
+
+**ATS research findings for remaining playwright companies (do NOT convert — wrong ATS):**
+- Freshworks → SmartRecruiters (`careers.smartrecruiters.com/Freshworks`)
+- Palo Alto Networks → SmartRecruiters (`paloaltonetworks2`)
+- Western Digital → SmartRecruiters
+- Wipro → SAP SuccessFactors
+- Chargebee → SAP SuccessFactors
+- Synopsys → Avature
+- HSBC Technology → Eightfold AI
+- American Express → Eightfold AI
+- AMD → iCIMS
+- Flipkart → TurboHire (Indian ATS)
+- Nutanix → Jobvite
+- Rippling → Own ATS (`ats.rippling.com`)
+- Fortinet → Oracle Cloud HCM
+- Swiggy → Darwinbox (Indian ATS)
+- Eightfold AI → Their own platform
+
+**Permanent LinkedIn companies (use LinkedIn Easy Apply only — no external URL exists):**
+TCS, Infosys, HCL Tech, Wipro, Cognizant, Tech Mahindra, Mphasis, Accenture, Capgemini — these Indian IT companies only accept applications through LinkedIn Easy Apply on their LinkedIn posts. The `linkedin.com/jobs/view/` URL IS the correct apply link for these.
+
+---
+
 ## Known Limitations / Future Work
 
-- Most **Playwright scrapers are unreliable** — modern JS-heavy career pages frequently change DOM, so many return zero results and fall back to LinkedIn
+- **115 playwright scrapers still unreliable** — returning zero and falling back to LinkedIn
+- Next improvement: build SmartRecruiters scraper (covers Freshworks, Palo Alto, Western Digital)
+- Next improvement: build iCIMS XML feed scraper (covers AMD and others)
 - Greenhouse, Lever, Workday API scrapers are the most reliable (pure API, no DOM)
-- LinkedIn (`jobspy`) may be rate-limited by LinkedIn — if blocked, those fallback results will be empty
-- `hours_old=24` in LinkedIn scraper means a job must be posted in last 24 hours to appear (good for freshness, but might miss some)
+- LinkedIn (`jobspy`) may be rate-limited by LinkedIn — if blocked, fallback results will be empty
+- `hours_old=24` in LinkedIn scraper means a job must be posted in last 24h to appear
 - No retry logic on failed scrapers
-- Playwright scrapers don't scroll/paginate, so they only see the first page of results
+- **Twilio sandbox**: re-join by sending join keyword to sandbox number whenever messages stop
 
 ---
 
