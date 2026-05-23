@@ -30,12 +30,17 @@ _CHUNK_SIZE = 1000
 
 def _send_chunks(client, from_: str, to: str, text: str):
     import time
-    for i in range(0, len(text), _CHUNK_SIZE):
-        client.messages.create(
-            from_=from_,
-            to=to,
-            body=text[i : i + _CHUNK_SIZE],
-        )
+    lines = text.split("\n")
+    chunk = ""
+    for line in lines:
+        addition = (line + "\n")
+        if len(chunk) + len(addition) > _CHUNK_SIZE and chunk:
+            client.messages.create(from_=from_, to=to, body=chunk.rstrip())
+            time.sleep(1)
+            chunk = ""
+        chunk += addition
+    if chunk.strip():
+        client.messages.create(from_=from_, to=to, body=chunk.rstrip())
         time.sleep(1)
 
 
@@ -94,22 +99,10 @@ def send_digest(new_jobs: list[dict], health_summary: dict):
                     lines.append(f"      Apply: {job['url']}")
         lines.append("")
 
-    # No new openings summary
-    all_companies = (
-        INDIAN_IT_COMPANIES + GLOBAL_TECH_COMPANIES + HFT_QUANT_COMPANIES
-        + INDIAN_UNICORN_COMPANIES + MNC_SERVICES_COMPANIES + FINANCE_TECH_COMPANIES
-    )
-    quiet = [
-        c for c in all_companies
-        if c not in by_company and health_summary.get(c) == "ok"
-    ]
-    if quiet:
-        lines.append(f"✅ No new openings: {', '.join(quiet)}\n")
-
-    # Scraper warnings
-    broken = [c for c, s in health_summary.items() if s in ("zero_results", "error")]
+    # Scraper warning — only show count, not the full list
+    broken = [c for c, s in health_summary.items() if s == "error"]
     if broken:
-        lines.append(f"⚠️ Scraper issues: {', '.join(broken)}\n")
+        lines.append(f"⚠️ {len(broken)} scraper(s) errored — check logs\n")
 
     lines.append(f"_Next update at {next_label} IST_")
 

@@ -22,6 +22,7 @@ def _scrape_company(name: str) -> tuple[list[dict], list[tuple]]:
     company = {"name": name, **COMPANY_CONFIGS.get(name, {})}
     jobs: list[dict] = []
     health: list[tuple] = []
+    careers_found = False
 
     try:
         scraper = get_scraper(company.get("type", "playwright"))
@@ -30,20 +31,25 @@ def _scrape_company(name: str) -> tuple[list[dict], list[tuple]]:
         status = "ok" if normalized else "zero_results"
         health.append((name, len(normalized), status, None))
         jobs.extend(normalized)
+        careers_found = bool(normalized)
         print(f"  {name}: careers={len(normalized)}")
     except Exception as e:
         health.append((name, 0, "error", str(e)))
         print(f"  {name}: careers ERROR — {e}")
 
-    try:
-        li_scraper = _get_linkedin_scraper()
-        li_raw = li_scraper.scrape(company)
-        li_norm = [li_scraper.normalize(j, name, "linkedin") for j in li_raw]
-        jobs.extend(li_norm)
-        if li_norm:
-            print(f"  {name}: linkedin={len(li_norm)}")
-    except Exception as e:
-        print(f"  {name}: linkedin skipped — {e}")
+    # Only fall back to LinkedIn when the career page scraper found nothing.
+    # This avoids LinkedIn URLs showing up for companies whose own portal worked,
+    # and prevents duplicate notifications for the same job from two sources.
+    if not careers_found:
+        try:
+            li_scraper = _get_linkedin_scraper()
+            li_raw = li_scraper.scrape(company)
+            li_norm = [li_scraper.normalize(j, name, "linkedin") for j in li_raw]
+            jobs.extend(li_norm)
+            if li_norm:
+                print(f"  {name}: linkedin={len(li_norm)}")
+        except Exception as e:
+            print(f"  {name}: linkedin skipped — {e}")
 
     return jobs, health
 

@@ -30,6 +30,8 @@ def init():
                 last_seen  DATETIME NOT NULL
             );
 
+            CREATE INDEX IF NOT EXISTS idx_seen_jobs_url ON seen_jobs (url);
+
             CREATE TABLE IF NOT EXISTS scraper_health (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 company   TEXT NOT NULL,
@@ -41,12 +43,23 @@ def init():
         """)
 
 
-def is_new_job(job_id: str) -> bool:
-    with _conn() as con:
-        row = con.execute(
-            "SELECT 1 FROM seen_jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
-    return row is None
+def is_new_job(job_id: str, url: str = "") -> bool:
+    try:
+        with _conn() as con:
+            row = con.execute(
+                "SELECT 1 FROM seen_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            if row:
+                return False
+            if url:
+                row = con.execute(
+                    "SELECT 1 FROM seen_jobs WHERE url = ?", (url,)
+                ).fetchone()
+        return row is None
+    except sqlite3.OperationalError:
+        # Tables don't exist yet — auto-init and treat as new
+        init()
+        return True
 
 
 def save_job(job: dict):
