@@ -23,10 +23,12 @@ class LinkedInScraper(BaseScraper):
             )
             jobs = []
             for _, row in jobs_df.iterrows():
+                # Prefer direct company apply URL over LinkedIn-hosted URL
+                url = str(row.get("job_url_direct", "") or row.get("job_url", "") or "")
                 jobs.append({
                     "title":    str(row.get("title", "") or ""),
                     "location": str(row.get("location", "") or ""),
-                    "url":      str(row.get("job_url", "") or ""),
+                    "url":      url,
                 })
             time.sleep(random.uniform(3, 6))
             return jobs
