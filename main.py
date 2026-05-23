@@ -77,8 +77,13 @@ def run():
     print(f"  New jobs after filtering: {len(new_jobs)}")
 
     health_summary = db.get_health_summary()
-    whatsapp_bot.send_digest(new_jobs, health_summary)
-    print(f"[{datetime.now()}] Run complete. WhatsApp digest sent.")
+    try:
+        whatsapp_bot.send_digest(new_jobs, health_summary)
+        print(f"[{datetime.now()}] Run complete. WhatsApp digest sent.")
+    except Exception as e:
+        print(f"[{datetime.now()}] ERROR: WhatsApp send failed — {e}")
+        print("  Scraping completed successfully; only the notification failed.")
+        raise
 
 
 if __name__ == "__main__":

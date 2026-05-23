@@ -104,6 +104,29 @@ EXCLUDE_KEYWORDS = [
     "lmts",
     # Freelance / contract roles
     "contract",
+    # SDE level 3+ (Dream11 posts "SDE 3 - DevOps" etc.)
+    "sde 3",
+    "sde-3",
+    "sde3",
+    "sde iii",
+    "sde 4",
+    "sde-4",
+    "sde4",
+    "sde iv",
+    # SDET level 2 (Dream11 "SDET - 2")
+    "sdet - 2",
+    "sdet-2",
+    "sdet 2",
+    # Vice President — Citi uses full form, not just "VP"
+    "vice president",
+    # LinkedIn placeholder title — not a real job
+    "custom software engineer",
+    # Support/consulting roles (Okta "Developer Support Engineer", MongoDB "DevOps Consultant")
+    "developer support",
+    "consultant",
+    # Roman numeral trick — LinkedIn sometimes uses lowercase 'l' instead of 'i' (e.g. "Engineer lll")
+    "engineer lll",
+    "engineer ll",
 ]
 
 # =============================================================================
