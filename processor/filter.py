@@ -10,6 +10,8 @@ _EXP_RE = re.compile(
 )
 # Catch parenthesized year ranges common in Indian LinkedIn titles: "(5-7)", "(3-6)"
 _PAREN_RANGE_RE = re.compile(r'\((\d{1,2})\s*[-–]\s*\d{1,2}\s*\)')
+# Catch trailing level suffix: "SDET - 2", "Engineer - 3" — level 2+ means not entry-level
+_TRAILING_LEVEL_RE = re.compile(r'[-–]\s*([2-9])\s*$')
 
 
 def _is_senior_by_experience(title: str) -> bool:
@@ -17,7 +19,10 @@ def _is_senior_by_experience(title: str) -> bool:
     if m and int(m.group(1)) >= 3:
         return True
     m2 = _PAREN_RANGE_RE.search(title)
-    return bool(m2) and int(m2.group(1)) >= 3
+    if m2 and int(m2.group(1)) >= 3:
+        return True
+    # Trailing level suffix: "SDET - 2", "Engineer - 3"
+    return bool(_TRAILING_LEVEL_RE.search(title))
 
 
 def passes_keyword_filter(title: str) -> bool:

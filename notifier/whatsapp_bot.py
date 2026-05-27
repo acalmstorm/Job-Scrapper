@@ -35,12 +35,14 @@ def _send_chunks(client, from_: str, to: str, text: str):
     for line in lines:
         addition = (line + "\n")
         if len(chunk) + len(addition) > _CHUNK_SIZE and chunk:
-            client.messages.create(from_=from_, to=to, body=chunk.rstrip())
+            msg = client.messages.create(from_=from_, to=to, body=chunk.rstrip())
+            print(f"  [WhatsApp] chunk sent — sid={msg.sid} status={msg.status}")
             time.sleep(1)
             chunk = ""
         chunk += addition
     if chunk.strip():
-        client.messages.create(from_=from_, to=to, body=chunk.rstrip())
+        msg = client.messages.create(from_=from_, to=to, body=chunk.rstrip())
+        print(f"  [WhatsApp] chunk sent — sid={msg.sid} status={msg.status}")
         time.sleep(1)
 
 

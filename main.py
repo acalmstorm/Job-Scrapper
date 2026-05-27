@@ -6,7 +6,7 @@ from config import COMPANY_CONFIGS, ALL_COMPANIES
 from scrapers.careers_scraper import get_scraper
 from scrapers.linkedin_scraper import LinkedInScraper
 from processor import filter as job_filter
-from notifier import whatsapp_bot
+from notifier import telegram_bot
 from database import db
 
 _thread_local = threading.local()
@@ -77,8 +77,13 @@ def run():
     print(f"  New jobs after filtering: {len(new_jobs)}")
 
     health_summary = db.get_health_summary()
-    whatsapp_bot.send_digest(new_jobs, health_summary)
-    print(f"[{datetime.now()}] Run complete. WhatsApp digest sent.")
+    try:
+        telegram_bot.send_digest(new_jobs, health_summary)
+        print(f"[{datetime.now()}] Run complete. Telegram digest sent.")
+    except Exception as e:
+        print(f"[{datetime.now()}] ERROR: Telegram send failed — {e}")
+        print("  Scraping completed successfully; only the notification failed.")
+        raise
 
 
 if __name__ == "__main__":

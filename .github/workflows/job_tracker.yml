@@ -6,6 +6,9 @@ on:
     - cron: '30 12 * * *'   # 6:00 PM IST  (12:30 UTC)
   workflow_dispatch:          # Manual trigger button in GitHub Actions UI
 
+permissions:
+  contents: write             # needed to commit jobs.db back to repo
+
 jobs:
   scrape:
     runs-on: ubuntu-22.04
@@ -37,24 +40,17 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
-      - name: Restore jobs database
-        uses: actions/cache@v4
-        with:
-          path: data/jobs.db
-          key: jobs-db-${{ github.run_id }}
-          restore-keys: jobs-db-
-
       - name: Run tracker
         env:
-          TWILIO_ACCOUNT_SID:   ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN:    ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
-          WHATSAPP_TO:          ${{ secrets.WHATSAPP_TO }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
 
-      - name: Save jobs database
+      - name: Persist jobs database
         if: always()
-        uses: actions/cache@v4
-        with:
-          path: data/jobs.db
-          key: jobs-db-${{ github.run_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/jobs.db
+          git diff --staged --quiet || git commit -m "chore: update jobs.db [skip ci]"
+          git push

@@ -77,7 +77,13 @@ class APICareersScraper(BaseScraper):
                 prefix  = cfg.get("apply_url_prefix", "")
                 apply_url = f"{prefix}{path}" if path else ""
 
-                results.append({"title": str(title), "location": str(location), "url": apply_url})
+                location_str = str(location)
+                # Skip non-India jobs (Amazon API still returns some UK/US results
+                # even with loc_query=India in the URL)
+                if location_str and not _is_india_location(location_str):
+                    continue
+
+                results.append({"title": str(title), "location": location_str, "url": apply_url})
 
             page += 1
 
