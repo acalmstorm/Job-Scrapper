@@ -1,13 +1,13 @@
 # IT Job Tracker — Project Memory
 
 > **Purpose**: Paste this file at the start of any new Claude session to restore full context.
-> **Last updated**: 2026-05-23 (Session 3 complete)
+> **Last updated**: 2026-10-05 (Session 4 complete — LLM enrichment layer added)
 
 ---
 
 ## What This Project Does
 
-Automated IT job scraper that runs twice daily (9 AM + 6 PM IST), scrapes ~150+ companies' career pages, filters for **early-career** software engineering roles in India, and sends a formatted WhatsApp digest via Twilio.
+Automated IT job scraper that runs twice daily (9 AM + 6 PM IST), scrapes ~150+ companies' career pages, filters for **early-career** software engineering roles in India, enriches each new posting with an LLM-extracted match score and tailored pitch, and sends a formatted digest via Telegram.
 
 ---
 
@@ -21,11 +21,17 @@ it-job-tracker/
 │   ├── base_scraper.py          # BaseScraper ABC + normalize() + job_id hashing
 │   ├── careers_scraper.py       # 5 scraper classes (API, Playwright, Requests, Greenhouse, Lever, Workday)
 │   ├── linkedin_scraper.py      # jobspy-based LinkedIn fallback scraper
-│   └── company_configs.py       # (legacy, config now in config.py)
+│   ├── company_configs.py       # (legacy, config now in config.py)
+│   └── description_fetcher.py   # Best-effort plain-text fetch of a job's description
 ├── processor/
 │   └── filter.py                # Keyword filter + experience-year regex + DB dedup
+├── llm/
+│   ├── profile.py                # USER_PROFILE — edit this with your real background
+│   ├── enrich.py                 # Claude Haiku tool-call → structured match extraction
+│   └── pipeline.py               # Orchestrates fetch+enrich across new jobs, threaded, capped
 ├── notifier/
-│   └── whatsapp_bot.py          # Twilio WhatsApp digest sender (chunked, grouped by section)
+│   ├── telegram_bot.py          # Telegram digest sender (chunked, grouped by section)
+│   └── whatsapp_bot.py          # Twilio WhatsApp digest sender (legacy, replaced by Telegram)
 ├── database/
 │   └── db.py                    # SQLite — job dedup, health logging
 └── data/
@@ -111,6 +117,42 @@ _PAREN_RANGE_RE = re.compile(r'\((\d{1,2})\s*[-–]\s*\d{1,2}\s*\)')
 # Blocks: "(5-7)", "(3-6)", "(4-8)"
 # Passes: "(0-2)", "(1-3)"
 ```
+
+---
+
+## LLM Enrichment Layer (added Session 4, 2026-10-05)
+
+Runs in `main.py` right after `job_filter.process()`, on `new_jobs` only (never on the
+full raw scrape — new-per-run counts are small, which keeps this cheap).
+
+**Pipeline per new job** (`llm/pipeline.py`, threaded, 6 workers):
+1. `scrapers/description_fetcher.py` — `requests.get(job_url)` + BeautifulSoup text
+   extraction. Works for server-rendered ATS pages (Greenhouse, Lever, most
+   `requests`-type pages). Returns `""` for JS-rendered SPAs (anything scraped via
+   Playwright — Meta, Flipkart, Zomato, etc.) since a plain GET only gets the app
+   shell, not the client-rendered description.
+2. `llm/enrich.py` — calls Claude Haiku (`claude-haiku-4-5-20251001`) with a
+   **forced tool call** (`tool_choice={"type":"tool","name":"extract_job_match"}`,
+   `strict: true`), so the response is a type-checked dict, not prose to parse. If
+   the description was empty, the prompt tells the model to infer cautiously from
+   title/company alone and reflect that uncertainty in a lower `match_score`.
+3. Returns `{skills, stack, seniority, match_score, pitch}`, merged onto the job dict.
+
+**Graceful degradation everywhere** — this stage only *adds* fields, never filters:
+- No `ANTHROPIC_API_KEY` set → `enrich_job()` returns `None` immediately, job ships
+  unenriched. The whole feature is opt-in by just setting (or not setting) the key.
+- API call fails/rate-limits → caught, logged, that one job ships unenriched.
+- `MAX_JOBS_TO_ENRICH = 40` in `llm/pipeline.py` — a cost/rate-limit safety net per
+  run; anything over the cap ships unenriched rather than blocking the run.
+
+**`llm/profile.py`** holds the candidate profile the LLM scores against — a plain
+editable dict, not a database row. Edit it to match your real resume for sharper
+match scores and pitches; it currently has sensible early-career defaults.
+
+**Digest changes** (`notifier/telegram_bot.py`) — each job line now optionally shows
+`🎯 <score>/100 · <stack>` and `💡 <pitch>` beneath the title. `new_jobs` is sorted by
+`match_score` descending before sending, so the most relevant postings lead each
+company's section.
 
 ---
 
@@ -213,6 +255,13 @@ _Next update at 6 PM IST_
 
 ## Environment Variables Required
 
+```
+TELEGRAM_BOT_TOKEN=...        # see notifier/telegram_bot.py docstring for setup
+TELEGRAM_CHAT_ID=...
+ANTHROPIC_API_KEY=...         # optional — unset = no LLM enrichment, pipeline runs as before
+```
+
+Legacy (WhatsApp via Twilio, replaced by Telegram but code kept in `notifier/whatsapp_bot.py`):
 ```
 TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
@@ -376,6 +425,11 @@ TCS, Infosys, HCL Tech, Wipro, Cognizant, Tech Mahindra, Mphasis, Accenture, Cap
 - `hours_old=24` in LinkedIn scraper means a job must be posted in last 24h to appear
 - No retry logic on failed scrapers
 - **Twilio sandbox**: re-join by sending join keyword to sandbox number whenever messages stop
+- **LLM enrichment description coverage**: only reliable for the Greenhouse/Lever/`requests`-type
+  sources — the ~115 Playwright-scraped companies' postings enrich from title/company alone
+  (lower-confidence match_score, by design — see "LLM Enrichment Layer" above)
+- **LLM enrichment cost control**: capped at `MAX_JOBS_TO_ENRICH = 40` new jobs per run
+  (`llm/pipeline.py`) — raise if your target list consistently produces more new jobs than that
 
 ---
 
@@ -383,4 +437,6 @@ TCS, Infosys, HCL Tech, Wipro, Cognizant, Tech Mahindra, Mphasis, Accenture, Cap
 
 - **Experience level**: Early career (0–2 years) — wants entry-level / junior / associate / new-grad roles only
 - **Target**: India-based roles (Bangalore, Hyderabad, Pune, Mumbai, Gurgaon, Delhi NCR, remote India)
-- **Notification**: WhatsApp via Twilio sandbox
+- **Notification**: Telegram (see `notifier/telegram_bot.py`; WhatsApp/Twilio code kept but unused)
+- **Structured profile for LLM scoring**: `llm/profile.py` — edit `USER_PROFILE` there with your
+  real skills/background; this free-text section is the human-readable summary of the same thing

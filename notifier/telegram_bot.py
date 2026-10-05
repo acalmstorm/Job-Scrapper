@@ -98,6 +98,14 @@ def send_digest(new_jobs: list[dict], health_summary: dict):
             for job in jobs:
                 loc = job.get("location", "") or ""
                 lines.append(f"    • {job['title']}" + (f" — {loc}" if loc else ""))
+                if job.get("match_score") is not None:
+                    stack = ", ".join(job.get("stack") or [])
+                    score_line = f"      🎯 {job['match_score']}/100"
+                    if stack:
+                        score_line += f" · {stack}"
+                    lines.append(score_line)
+                if job.get("pitch"):
+                    lines.append(f"      💡 {job['pitch']}")
                 if job.get("url"):
                     lines.append(f"      Apply: {job['url']}")
         lines.append("")

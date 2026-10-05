@@ -4,3 +4,4 @@ requests==2.32.3
 python-jobspy
 python-dotenv==1.0.1
 aiohttp==3.9.5
+anthropic==1.11.0

@@ -6,6 +6,7 @@ from config import COMPANY_CONFIGS, ALL_COMPANIES
 from scrapers.careers_scraper import get_scraper
 from scrapers.linkedin_scraper import LinkedInScraper
 from processor import filter as job_filter
+from llm.pipeline import enrich_jobs
 from notifier import telegram_bot
 from database import db
 
@@ -75,6 +76,10 @@ def run():
 
     new_jobs = job_filter.process(all_raw_jobs)
     print(f"  New jobs after filtering: {len(new_jobs)}")
+
+    new_jobs = enrich_jobs(new_jobs)
+    enriched_count = sum(1 for j in new_jobs if j.get("match_score") is not None)
+    print(f"  LLM-enriched: {enriched_count}/{len(new_jobs)}")
 
     health_summary = db.get_health_summary()
     try:
